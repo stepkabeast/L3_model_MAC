@@ -1,0 +1,36 @@
+{
+  "subnets": 2,
+  "devices": [
+    {
+      "type": "PC",
+      "count": 1,
+      "ipBase": "192.168.{subnet}.10",
+      "network": "192.168.{subnet}.0/24",
+      "gateway": "Router{subnet}"
+    },
+    {
+      "type": "Switch",
+      "count": 1,
+      "ipBase": "192.168.{subnet}.1",
+      "network": "192.168.{subnet}.0/24"
+    },
+    {
+      "type": "Router",
+      "count": 1,
+      "ipBase": "192.168.{subnet}.254",
+      "network": "192.168.{subnet}.0/24"
+    }
+  ],
+  "routing": [
+    {
+      "from": "192.168.1.0/24",
+      "to": "192.168.2.0/24",
+      "nextHop": "Router2"
+    },
+    {
+      "from": "192.168.2.0/24",
+      "to": "192.168.1.0/24",
+      "nextHop": "Router1"
+    }
+  ]
+}

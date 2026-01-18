@@ -3,9 +3,9 @@ import jade.lang.acl.ACLMessage;
 import java.util.UUID;
 
 public class PCAgent extends DeviceAgent {
-    private String defaultGateway;
-    private String subnet;
-    private String packetLog = "";
+    private String gateway;
+    private String network;
+    private NetworkConfig config;
 
     @Override
     protected String getDeviceType() {
@@ -16,17 +16,27 @@ public class PCAgent extends DeviceAgent {
     protected void setup() {
         super.setup();
 
-        if (getLocalName().equals("PC1")) {
-            ipAddress = "192.168.1.10";
-            defaultGateway = "Router1";
-            subnet = "192.168.1.0/24";
-            System.out.println(getLocalName() + " default gateway: " + defaultGateway);
-        } else if (getLocalName().equals("PC2")) {
-            ipAddress = "192.168.2.20";
-            defaultGateway = "Router2";
-            subnet = "192.168.2.0/24";
-            System.out.println(getLocalName() + " default gateway: " + defaultGateway);
+        Object[] args = getArguments();
+        if (args != null && args.length > 0) {
+            // args[0] - имя устройства
+            // args[1] - IP адрес
+            // args[2] - сеть
+            // args[3] - шлюз
+            // args[4] - имя контейнера
+            // args[5] - конфигурация
+
+            if (args.length > 2) {
+                network = (String) args[2];
+            }
+            if (args.length > 3) {
+                gateway = (String) args[3];
+            }
+            if (args.length > 5) {
+                config = (NetworkConfig) args[5];
+            }
         }
+
+        System.out.println(getLocalName() + " сеть: " + network + ", шлюз: " + gateway);
     }
 
     @Override
@@ -40,8 +50,6 @@ public class PCAgent extends DeviceAgent {
             if (packet.getType().equals("PING")) {
                 System.out.println("[" + containerName + "] " + getLocalName() +
                         " получил PING пакет: " + packet);
-
-                logPacketInfo(packet);
 
                 // Если пинг адресован нам
                 if (ipAddress.equals(packet.getDestIP())) {
@@ -61,14 +69,10 @@ public class PCAgent extends DeviceAgent {
                     reply.setContent(pongPacket.toMessageString());
                     reply.addReceiver(msg.getSender());
                     send(reply);
-
-                    logPacketInfo(pongPacket);
                 }
             } else if (packet.getType().equals("PONG")) {
                 System.out.println("[" + containerName + "] " + getLocalName() +
                         " получил PONG пакет: " + packet);
-
-                logPacketInfo(packet);
 
                 if (ipAddress.equals(packet.getDestIP())) {
                     System.out.println("[" + containerName + "] ✓ " + getLocalName() +
@@ -88,39 +92,58 @@ public class PCAgent extends DeviceAgent {
         System.out.println("\n=== Инициация PING ===");
         System.out.println("[" + containerName + "] " + getLocalName() +
                 " запускает PING до " + targetIP);
-        System.out.println("ID пакета: " + packetId);
-        System.out.println("Пакет: " + pingPacket);
 
         ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
         msg.setContent(pingPacket.toMessageString());
 
-        // Определяем маршрут
-        if (targetIP.startsWith("192.168.1.") && getLocalName().equals("PC1")) {
-            msg.addReceiver(new AID("Switch1", AID.ISLOCALNAME));
-            System.out.println("[" + containerName + "] " + getLocalName() +
-                    " → Switch1");
-        } else if (targetIP.startsWith("192.168.2.") && getLocalName().equals("PC2")) {
-            msg.addReceiver(new AID("Router2", AID.ISLOCALNAME));
-            System.out.println("[" + containerName + "] " + getLocalName() +
-                    " → Router2");
+        // Определяем, в той же ли сети получатель
+        boolean sameNetwork = isInSameNetwork(targetIP);
+
+        if (sameNetwork) {
+            // Отправляем напрямую на свитч
+            msg.addReceiver(new AID("Switch" + containerName.replace("subnet", ""),
+                    AID.ISLOCALNAME));
         } else {
-            msg.addReceiver(new AID(defaultGateway, AID.ISLOCALNAME));
-            System.out.println("[" + containerName + "] " + getLocalName() +
-                    " → " + defaultGateway);
+            // Отправляем на шлюз
+            if (gateway != null) {
+                msg.addReceiver(new AID(gateway, AID.ISLOCALNAME));
+            } else {
+                System.out.println("[" + containerName + "] " + getLocalName() +
+                        " не имеет шлюза для отправки пакета");
+                return;
+            }
         }
 
         send(msg);
-        logPacketInfo(pingPacket);
     }
 
-    private void logPacketInfo(PacketInfo packet) {
-        packetLog += packet + "\n";
-        if (packetLog.length() > 1000) {
-            packetLog = packetLog.substring(packetLog.length() - 500);
+    private boolean isInSameNetwork(String targetIP) {
+        if (network == null || targetIP == null) {
+            return false;
+        }
+
+        try {
+            String[] networkParts = network.split("/");
+            String networkIp = networkParts[0];
+            int prefix = Integer.parseInt(networkParts[1]);
+
+            long ipLong = ipToLong(targetIP);
+            long networkLong = ipToLong(networkIp);
+            long mask = (0xFFFFFFFFL << (32 - prefix)) & 0xFFFFFFFFL;
+
+            return (ipLong & mask) == (networkLong & mask);
+        } catch (Exception e) {
+            return false;
         }
     }
 
-    public String getPacketLog() {
-        return packetLog;
+    private long ipToLong(String ip) {
+        String[] octets = ip.split("\\.");
+        long result = 0;
+        for (int i = 0; i < 4; i++) {
+            result <<= 8;
+            result |= Integer.parseInt(octets[i]);
+        }
+        return result;
     }
 }
