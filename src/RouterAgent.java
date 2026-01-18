@@ -4,6 +4,7 @@ import java.util.Map;
 
 public class RouterAgent extends DeviceAgent {
     private Map<String, String> routingTable = new HashMap<>();
+    private String routerType;
 
     @Override
     protected String getDeviceType() {
@@ -14,46 +15,56 @@ public class RouterAgent extends DeviceAgent {
     protected void setup() {
         super.setup();
 
-        if (getLocalName().equals("Router1")) {
-            ipAddress = "192.168.1.254";
-            routingTable.put("192.168.1.0/24", "Switch1");
-            routingTable.put("192.168.2.0/24", "Router2");
-        } else if (getLocalName().equals("Router2")) {
-            ipAddress = "192.168.2.254";
-            routingTable.put("192.168.1.0/24", "Router1");
-            routingTable.put("192.168.2.0/24", "PC2");
+        Object[] args = getArguments();
+        if (args != null && args.length > 2) {
+            routerType = (String) args[1];
+        } else {
+            routerType = getLocalName();
         }
 
-        System.out.println(getLocalName() + " routing table: " + routingTable);
+        // Настраиваем таблицу маршрутизации в зависимости от типа роутера
+        if (routerType.equals("Router1")) {
+            ipAddress = "192.168.1.254";
+            routingTable.put("192.168.1.0/24", "Switch1");   // Локальная сеть
+            routingTable.put("192.168.2.0/24", "Router2");   // Сеть через другой роутер
+            routingTable.put("default", "Router2");          // Маршрут по умолчанию
+        } else if (routerType.equals("Router2")) {
+            ipAddress = "192.168.2.254";
+            routingTable.put("192.168.1.0/24", "Router1");   // Обратно в первую сеть
+            routingTable.put("192.168.2.0/24", "PC2");       // Локальная сеть
+            routingTable.put("default", "Router1");          // Маршрут по умолчанию
+        }
+
+        System.out.println("[" + containerName + "] " + getLocalName() +
+                " таблица маршрутизации: " + routingTable);
     }
 
     @Override
     protected void processMessage(ACLMessage msg) {
         String content = msg.getContent();
-        System.out.println(getLocalName() + " processing: " + content);
+        System.out.println("[" + containerName + "] " + getLocalName() +
+                " обрабатывает: " + content);
 
         String targetIP = content.split(":")[1];
         String nextHop = findNextHop(targetIP);
 
         if (nextHop != null) {
-            forwardPacket(msg, nextHop);
+            forwardPacket(msg, nextHop, "Маршрутизация к " + targetIP);
+        } else {
+            System.out.println("[" + containerName + "] " + getLocalName() +
+                    " не нашел маршрут для " + targetIP);
         }
     }
 
     private String findNextHop(String ip) {
-        for (Map.Entry<String, String> entry : routingTable.entrySet()) {
-            String network = entry.getKey().split("/")[0];
-            String mask = entry.getKey().split("/")[1];
-
-            if (isInNetwork(ip, network, Integer.parseInt(mask))) {
-                return entry.getValue();
-            }
+        // Проверяем точные совпадения сетей
+        if (ip.startsWith("192.168.1.")) {
+            return routingTable.get("192.168.1.0/24");
+        } else if (ip.startsWith("192.168.2.")) {
+            return routingTable.get("192.168.2.0/24");
         }
-        return null;
-    }
 
-    private boolean isInNetwork(String ip, String network, int mask) {
-        // Упрощенная проверка сети
-        return ip.startsWith(network.substring(0, network.lastIndexOf('.')));
+        // Возвращаем маршрут по умолчанию
+        return routingTable.get("default");
     }
 }
