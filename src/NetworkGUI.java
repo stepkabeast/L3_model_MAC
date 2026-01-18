@@ -331,7 +331,7 @@ public class NetworkGUI extends JFrame {
                 // Рисуем символ пакета
                 g2d.setColor(Color.WHITE);
                 g2d.setFont(new Font("Arial", Font.BOLD, 10));
-                g2d.drawString("📦", (x1 + x2) / 2 - 10, (y1 + y2) / 2 + 4);
+                g2d.drawString("PING", (x1 + x2) / 2 - 10, (y1 + y2) / 2 + 4);
 
                 // Показываем текущий переход
                 g2d.setColor(Color.DARK_GRAY);
