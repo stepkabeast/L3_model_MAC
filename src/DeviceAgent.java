@@ -23,7 +23,6 @@ public abstract class DeviceAgent extends Agent {
             }
         }
 
-        // Если имя контейнера не передали, получаем его
         if (containerName == null || containerName.isEmpty()) {
             try {
                 containerName = getContainerController().getContainerName();

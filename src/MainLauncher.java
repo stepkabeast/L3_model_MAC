@@ -62,7 +62,6 @@ public class MainLauncher {
             }
 
             logger.log(Logger.INFO, "Agents started");
-            //System.out.println("\n=== Все агенты успешно запущены ===");
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -126,7 +125,7 @@ public class MainLauncher {
     }
 
     private static void shutdownPlatform() {
-        System.out.println("\n=== Завершение работы платформы ===");
+        logger.log(Logger.INFO, "Shutting down platform...");
         if (rt != null) {
             rt.shutDown();
         }
