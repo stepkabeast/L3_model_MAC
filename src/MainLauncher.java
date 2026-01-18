@@ -40,7 +40,7 @@ public class MainLauncher {
             Profile pMain = new ProfileImpl();
             pMain.setParameter(Profile.MAIN_HOST, "localhost");
             pMain.setParameter(Profile.MAIN_PORT, "1099");
-            pMain.setParameter(Profile.GUI, "true");
+            pMain.setParameter(Profile.GUI, "false");
 
             // Создаем главный контейнер
             subnet1 = rt.createMainContainer(pMain);

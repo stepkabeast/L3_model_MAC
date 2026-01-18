@@ -130,7 +130,7 @@ public class NetworkGUI extends JFrame {
         packetInfoArea.append("----------------------------------------\n");
 
         // Переключаемся на вкладку с информацией о пакетах
-        tabbedPane.setSelectedIndex(1);
+        //tabbedPane.setSelectedIndex(1);
     }
 
     private void showPacketInfo() {
@@ -222,11 +222,20 @@ public class NetworkGUI extends JFrame {
                     repaint();
                 } else {
                     ((Timer)e.getSource()).stop();
-                    // Показываем завершение передачи
+
+                    // Показываем завершающее сообщение
                     new Timer(1000, ev -> {
                         currentPacketInfo += "\n✓ Передача завершена";
                         repaint();
                         ((Timer)ev.getSource()).stop();
+
+                        // Через 2 секунды убираем сообщение
+                        new Timer(2000, e2 -> {
+                            currentPacketInfo = currentPacketInfo.replace("\n✓ Передача завершена", "");
+                            animationStep = 0; // Сбрасываем анимацию
+                            repaint();
+                            ((Timer)e2.getSource()).stop();
+                        }).start();
                     }).start();
                 }
             });
