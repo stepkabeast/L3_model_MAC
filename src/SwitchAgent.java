@@ -3,7 +3,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class SwitchAgent extends DeviceAgent {
-    private Map<String, String> macTable = new HashMap<>();
+    private Map<String, String> macTable = new HashMap<>(); // MAC -> Port/AID
 
     @Override
     protected String getDeviceType() {
@@ -19,22 +19,45 @@ public class SwitchAgent extends DeviceAgent {
 
     @Override
     protected void processMessage(ACLMessage msg) {
-        String sender = msg.getSender().getLocalName();
         String content = msg.getContent();
+        PacketInfo packet = PacketInfo.fromMessageString(content);
 
-        // Обновляем MAC таблицу
-        macTable.put(sender, "Port" + macTable.size());
+        if (packet != null) {
+            packet.addHop(getLocalName());
+            packet.setCurrentHop(getLocalName());
+
+            System.out.println("[" + containerName + "] " + getLocalName() +
+                    " обрабатывает пакет: " + packet);
+
+            // Обновляем MAC таблицу
+            String sender = msg.getSender().getLocalName();
+            macTable.put(sender, "Port" + (macTable.size() + 1));
+
+            // Определяем куда форвардить на основе IP
+            String destIP = packet.getDestIP();
+
+            if (destIP.startsWith("192.168.1.")) {
+                if (destIP.equals("192.168.1.10")) {
+                    forwardPacket(msg, packet, "PC1");
+                } else if (destIP.equals("192.168.1.254")) {
+                    forwardPacket(msg, packet, "Router1");
+                }
+            } else if (packet.getType().equals("PONG")) {
+                // Для PONG пакетов возвращаем на PC1
+                forwardPacket(msg, packet, "PC1");
+            }
+        }
+    }
+
+    private void forwardPacket(ACLMessage msg, PacketInfo packet, String nextHop) {
+        packet.addHop(nextHop);
 
         System.out.println("[" + containerName + "] " + getLocalName() +
-                " получил пакет от " + sender);
+                " → " + nextHop + ": " + packet.getType() + " пакет");
 
-        // Определяем куда форвардить
-        if (content.contains("192.168.1.10") && content.contains("PING")) {
-            forwardPacket(msg, "PC1", "Пересылка PING на PC1");
-        } else if (content.contains("192.168.1.254") || content.contains("Router1")) {
-            forwardPacket(msg, "Router1", "Пересылка на роутер");
-        } else if (content.contains("PONG") && content.contains("192.168.1.10")) {
-            forwardPacket(msg, "PC1", "Возврат PONG на PC1");
-        }
+        ACLMessage forwardMsg = new ACLMessage(ACLMessage.INFORM);
+        forwardMsg.setContent(packet.toMessageString());
+        forwardMsg.addReceiver(getAID(nextHop));
+        send(forwardMsg);
     }
 }

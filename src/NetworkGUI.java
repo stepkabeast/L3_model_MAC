@@ -8,67 +8,93 @@ import java.util.List;
 public class NetworkGUI extends JFrame {
     private NetworkPanel networkPanel;
     private JButton pingButton;
-    private JButton startAgentsButton;
-    private JTextArea logArea;
+    private JButton showPacketInfoButton;
+    private JTextArea packetInfoArea;
     private JComboBox<String> sourceDevice;
     private JComboBox<String> targetDevice;
     private Map<String, DeviceShape> devices;
+    private JTabbedPane tabbedPane;
 
     public NetworkGUI() {
-        setTitle("L3 Network Simulator - JADE");
+        setTitle("L3 Network Simulator - Packet Info");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1000, 800);
+        setSize(1200, 800);
         setLayout(new BorderLayout());
 
         devices = new HashMap<>();
 
         // Панель управления
-        JPanel controlPanel = new JPanel();
-        controlPanel.setLayout(new FlowLayout());
+        JPanel controlPanel = new JPanel(new FlowLayout());
 
         sourceDevice = new JComboBox<>(new String[]{"PC1", "PC2"});
         targetDevice = new JComboBox<>(new String[]{"PC1", "PC2"});
 
         pingButton = new JButton("Start Ping");
-        pingButton.addActionListener(e -> startPing());
-        pingButton.setEnabled(true);
+        pingButton.addActionListener(this::startPing);
 
-        startAgentsButton = new JButton("Перезапустить агентов");
-        startAgentsButton.addActionListener(e -> restartAgents());
+        showPacketInfoButton = new JButton("Показать инфо о пакетах");
+        showPacketInfoButton.addActionListener(e -> showPacketInfo());
 
         controlPanel.add(new JLabel("Откуда:"));
         controlPanel.add(sourceDevice);
         controlPanel.add(new JLabel("Куда:"));
         controlPanel.add(targetDevice);
         controlPanel.add(pingButton);
-        controlPanel.add(startAgentsButton);
+        controlPanel.add(showPacketInfoButton);
 
-        // Панель логов
-        JPanel logPanel = new JPanel(new BorderLayout());
-        logArea = new JTextArea(10, 50);
-        logArea.setEditable(false);
-        logArea.append("=== Лог системы L3 сети ===\n");
-        logArea.append("Main-Container: PC1, Switch1, Router1\n");
-        logArea.append("Container2: PC2, Router2\n");
-        logArea.append("----------------------------\n");
+        // Создаем вкладки
+        tabbedPane = new JTabbedPane();
 
-        JScrollPane scrollPane = new JScrollPane(logArea);
-        logPanel.add(new JLabel("Лог событий:"), BorderLayout.NORTH);
-        logPanel.add(scrollPane, BorderLayout.CENTER);
-
-        // Панель сети
+        // Вкладка 1: Сетевая схема
         networkPanel = new NetworkPanel();
+        JPanel networkTab = new JPanel(new BorderLayout());
+        networkTab.add(networkPanel, BorderLayout.CENTER);
 
-        // Добавляем все панели
+        // Вкладка 2: Информация о пакетах
+        JPanel packetInfoTab = new JPanel(new BorderLayout());
+        packetInfoArea = new JTextArea();
+        packetInfoArea.setEditable(false);
+        packetInfoArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        JScrollPane scrollPane = new JScrollPane(packetInfoArea);
+        packetInfoTab.add(new JLabel("Информация о передаваемых пакетах:"), BorderLayout.NORTH);
+        packetInfoTab.add(scrollPane, BorderLayout.CENTER);
+
+        // Вкладка 3: Сетевые устройства
+        JPanel devicesTab = createDevicesInfoPanel();
+
+        tabbedPane.addTab("Сетевая схема", networkTab);
+        tabbedPane.addTab("Информация о пакетах", packetInfoTab);
+        tabbedPane.addTab("Устройства сети", devicesTab);
+
         add(controlPanel, BorderLayout.NORTH);
-        add(networkPanel, BorderLayout.CENTER);
-        add(logPanel, BorderLayout.SOUTH);
+        add(tabbedPane, BorderLayout.CENTER);
 
         initializeDevices();
     }
 
+    private JPanel createDevicesInfoPanel() {
+        JPanel panel = new JPanel(new GridLayout(5, 1, 5, 5));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        String[] deviceInfo = {
+                "PC1: IP=192.168.1.10, Шлюз=Router1, Контейнер=Main-Container",
+                "Switch1: IP=192.168.1.1, Тип=L2 Switch, Контейнер=Main-Container",
+                "Router1: IP=192.168.1.254, Сети: 192.168.1.0/24→Switch1, 192.168.2.0/24→Router2",
+                "Router2: IP=192.168.2.254, Сети: 192.168.1.0/24→Router1, 192.168.2.0/24→PC2",
+                "PC2: IP=192.168.2.20, Шлюз=Router2, Контейнер=Container2"
+        };
+
+        for (String info : deviceInfo) {
+            JLabel label = new JLabel(info);
+            label.setFont(new Font("Arial", Font.PLAIN, 14));
+            label.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            panel.add(label);
+        }
+
+        return panel;
+    }
+
     private void initializeDevices() {
-        // Создаем устройства на схеме
         devices.put("PC1", new DeviceShape(100, 200, "PC1\n192.168.1.10", Color.BLUE, "Main-Container"));
         devices.put("Switch1", new DeviceShape(300, 200, "Switch1\n192.168.1.1", Color.GREEN, "Main-Container"));
         devices.put("Router1", new DeviceShape(500, 200, "Router1\n192.168.1.254", Color.ORANGE, "Main-Container"));
@@ -78,35 +104,43 @@ public class NetworkGUI extends JFrame {
         networkPanel.setDevices(devices);
     }
 
-    private void startPing() {
+    private void startPing(ActionEvent e) {
         String source = (String) sourceDevice.getSelectedItem();
         String target = (String) targetDevice.getSelectedItem();
 
         if (source.equals(target)) {
-            logArea.append("Ошибка: Выберите разные устройства!\n");
-            JOptionPane.showMessageDialog(this, "Select different devices!");
+            JOptionPane.showMessageDialog(this, "Выберите разные устройства!");
             return;
         }
 
-        logArea.append("\n=== Запуск PING ===\n");
-        logArea.append(source + " → " + target + "\n");
+        String sourceIP = source.equals("PC1") ? "192.168.1.10" : "192.168.2.20";
+        String targetIP = target.equals("PC1") ? "192.168.1.10" : "192.168.2.20";
+
+        packetInfoArea.append("\n=== ЗАПУСК PING ===\n");
+        packetInfoArea.append("От: " + source + " (" + sourceIP + ")\n");
+        packetInfoArea.append("К: " + target + " (" + targetIP + ")\n");
+        packetInfoArea.append("Время: " + new Date() + "\n");
 
         // Определяем маршрут для анимации
         List<String> route = findRoute(source, target);
         networkPanel.animatePacket(route);
 
-        logArea.append("Маршрут: " + String.join(" → ", route) + "\n");
-        logArea.append("См. вывод в консоли для деталей JADE агентов\n");
+        // Показываем информацию о маршруте
+        packetInfoArea.append("Маршрут: " + String.join(" → ", route) + "\n");
+        packetInfoArea.append("----------------------------------------\n");
 
-        // Прокручиваем лог вниз
-        logArea.setCaretPosition(logArea.getDocument().getLength());
+        // Переключаемся на вкладку с информацией о пакетах
+        tabbedPane.setSelectedIndex(1);
     }
 
-    private void restartAgents() {
-        logArea.append("\n=== Перезапуск агентов ===\n");
-        logArea.append("Функционал перезапуска будет добавлен\n");
-        logArea.append("Для перезапуска закройте и запустите программу\n");
-        logArea.setCaretPosition(logArea.getDocument().getLength());
+    private void showPacketInfo() {
+        packetInfoArea.append("\n=== ИНФОРМАЦИЯ О ПАКЕТАХ ===\n");
+        packetInfoArea.append("Типы пакетов в системе:\n");
+        packetInfoArea.append("1. PING (Echo Request) - запрос проверки доступности\n");
+        packetInfoArea.append("2. PONG (Echo Reply) - ответ на PING\n");
+        packetInfoArea.append("3. Формат пакета: [ID:TYPE:SRC_IP:DST_IP:SRC_MAC:DST_MAC:TTL:CURRENT:PATH]\n");
+        packetInfoArea.append("Пример: PKT-123456:PING:192.168.1.10:192.168.2.20:AA:BB:CC:DD:EE:FF:...\n");
+        packetInfoArea.append("----------------------------------------\n");
     }
 
     private List<String> findRoute(String source, String target) {
@@ -124,22 +158,11 @@ public class NetworkGUI extends JFrame {
             route.add("Router1");
             route.add("Switch1");
             route.add("PC1");
-        } else if (source.equals("PC1") && target.equals("Switch1")) {
-            route.add("PC1");
-            route.add("Switch1");
-        } else if (source.equals("PC1") && target.equals("Router1")) {
-            route.add("PC1");
-            route.add("Switch1");
-            route.add("Router1");
-        } else if (source.equals("PC2") && target.equals("Router2")) {
-            route.add("PC2");
-            route.add("Router2");
         }
 
         return route;
     }
 
-    // Вложенный класс для графического представления устройства
     static class DeviceShape {
         int x, y;
         String name;
@@ -147,20 +170,19 @@ public class NetworkGUI extends JFrame {
         String container;
 
         public DeviceShape(int x, int y, String name, Color color, String container) {
-            this.x = x;
-            this.y = y;
+            this.x = x; this.y = y;
             this.name = name;
             this.color = color;
             this.container = container;
         }
     }
 
-    // Вложенный класс для отрисовки сетевой схемы
     static class NetworkPanel extends JPanel {
         private Map<String, DeviceShape> devices;
         private List<String> currentRoute;
         private int animationStep = 0;
         private Timer animationTimer;
+        private String currentPacketInfo = "";
 
         public NetworkPanel() {
             setBackground(Color.WHITE);
@@ -180,15 +202,29 @@ public class NetworkGUI extends JFrame {
                 animationTimer.stop();
             }
 
+            // Создаем информацию о пакете
+            String source = route.get(0);
+            String target = route.get(route.size() - 1);
+            String sourceIP = source.equals("PC1") ? "192.168.1.10" : "192.168.2.20";
+            String targetIP = target.equals("PC1") ? "192.168.1.10" : "192.168.2.20";
+            String packetId = "PKT-" + System.currentTimeMillis() % 1000000;
+
+            currentPacketInfo = String.format(
+                    "Пакет %s: %s → %s\n" +
+                            "PING %s → %s\n" +
+                            "TTL: 64, Протокол: ICMP",
+                    packetId, source, target, sourceIP, targetIP
+            );
+
             animationTimer = new Timer(500, e -> {
                 if (animationStep < currentRoute.size() - 1) {
                     animationStep++;
                     repaint();
                 } else {
                     ((Timer)e.getSource()).stop();
-                    // Возвращаем к исходному состоянию через 1 секунду
+                    // Показываем завершение передачи
                     new Timer(1000, ev -> {
-                        animationStep = 0;
+                        currentPacketInfo += "\n✓ Передача завершена";
                         repaint();
                         ((Timer)ev.getSource()).stop();
                     }).start();
@@ -209,19 +245,14 @@ public class NetworkGUI extends JFrame {
             // Рисуем заголовок
             g2d.setColor(Color.BLACK);
             g2d.setFont(new Font("Arial", Font.BOLD, 16));
-            g2d.drawString("Схема L3 сети (JADE Multi-Agent System)", 300, 30);
+            g2d.drawString("Схема L3 сети с передачей пакетов", 300, 30);
 
             // Рисуем соединения
             g2d.setColor(Color.GRAY);
             g2d.setStroke(new BasicStroke(2));
-
-            // PC1 - Switch1
             drawConnection(g2d, "PC1", "Switch1");
-            // Switch1 - Router1
             drawConnection(g2d, "Switch1", "Router1");
-            // Router1 - Router2
             drawConnection(g2d, "Router1", "Router2");
-            // Router2 - PC2
             drawConnection(g2d, "Router2", "PC2");
 
             // Рисуем устройства
@@ -233,6 +264,9 @@ public class NetworkGUI extends JFrame {
             if (currentRoute != null && animationStep > 0) {
                 drawPacket(g2d, currentRoute.get(animationStep - 1),
                         currentRoute.get(animationStep));
+
+                // Показываем информацию о текущем пакете
+                drawPacketInfo(g2d);
             }
 
             // Легенда
@@ -244,32 +278,17 @@ public class NetworkGUI extends JFrame {
             DeviceShape d2 = devices.get(dev2);
             if (d1 != null && d2 != null) {
                 g2d.drawLine(d1.x + 40, d1.y + 30, d2.x, d2.y + 30);
-
-                // Рисуем стрелочку
-                int midX = (d1.x + 40 + d2.x) / 2;
-                int midY = (d1.y + 30 + d2.y + 30) / 2;
-
-                // Стрелочка для двусторонней связи
-                g2d.setColor(Color.DARK_GRAY);
-                Polygon arrow = new Polygon();
-                arrow.addPoint(midX, midY);
-                arrow.addPoint(midX - 5, midY - 3);
-                arrow.addPoint(midX - 5, midY + 3);
-                g2d.fill(arrow);
             }
         }
 
         private void drawDevice(Graphics2D g2d, DeviceShape device) {
-            // Рисуем основное тело устройства
             g2d.setColor(device.color);
             g2d.fillRoundRect(device.x, device.y, 80, 60, 10, 10);
             g2d.setColor(Color.BLACK);
             g2d.drawRoundRect(device.x, device.y, 80, 60, 10, 10);
 
-            // Рисуем текст (имя и IP)
             g2d.setColor(Color.WHITE);
             g2d.setFont(new Font("Arial", Font.BOLD, 11));
-
             String[] lines = device.name.split("\n");
             for (int i = 0; i < lines.length; i++) {
                 FontMetrics fm = g2d.getFontMetrics();
@@ -277,8 +296,7 @@ public class NetworkGUI extends JFrame {
                 g2d.drawString(lines[i], device.x + 40 - textWidth/2, device.y + 20 + i*15);
             }
 
-            // Рисуем контейнер
-            g2d.setFont(new Font("Arial", Font.PLAIN, 10));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 9));
             g2d.setColor(Color.YELLOW);
             FontMetrics fm = g2d.getFontMetrics();
             int textWidth = fm.stringWidth(device.container);
@@ -297,75 +315,64 @@ public class NetworkGUI extends JFrame {
 
                 // Рисуем движущийся пакет
                 g2d.setColor(Color.RED);
-                g2d.fillOval((x1 + x2) / 2 - 10, (y1 + y2) / 2 - 10, 20, 20);
+                g2d.fillOval((x1 + x2) / 2 - 12, (y1 + y2) / 2 - 12, 24, 24);
                 g2d.setColor(Color.BLACK);
-                g2d.drawOval((x1 + x2) / 2 - 10, (y1 + y2) / 2 - 10, 20, 20);
-                g2d.setFont(new Font("Arial", Font.BOLD, 9));
+                g2d.drawOval((x1 + x2) / 2 - 12, (y1 + y2) / 2 - 12, 24, 24);
+
+                // Рисуем символ пакета
                 g2d.setColor(Color.WHITE);
-                g2d.drawString("PACKET", (x1 + x2) / 2 - 18, (y1 + y2) / 2 + 3);
+                g2d.setFont(new Font("Arial", Font.BOLD, 10));
+                g2d.drawString("📦", (x1 + x2) / 2 - 10, (y1 + y2) / 2 + 4);
+
+                // Показываем текущий переход
+                g2d.setColor(Color.DARK_GRAY);
+                g2d.setFont(new Font("Arial", Font.BOLD, 12));
+                g2d.drawString(from + " → " + to, (x1 + x2) / 2 - 30, (y1 + y2) / 2 - 20);
+            }
+        }
+
+        private void drawPacketInfo(Graphics2D g2d) {
+            g2d.setColor(new Color(0, 0, 0, 200)); // Полупрозрачный черный
+            g2d.fillRoundRect(50, 450, 800, 120, 15, 15);
+
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Monospaced", Font.BOLD, 12));
+
+            String[] lines = currentPacketInfo.split("\n");
+            for (int i = 0; i < lines.length; i++) {
+                g2d.drawString(lines[i], 70, 480 + i * 20);
+            }
+
+            // Показываем прогресс
+            if (currentRoute != null && animationStep < currentRoute.size() - 1) {
+                String progress = String.format("Прогресс: %d/%d",
+                        animationStep, currentRoute.size() - 1);
+                g2d.drawString(progress, 70, 480 + lines.length * 20);
             }
         }
 
         private void drawLegend(Graphics2D g2d) {
-            int legendX = 50;
-            int legendY = 500;
+            int legendX = 650;
+            int legendY = 100;
 
             g2d.setColor(Color.BLACK);
             g2d.setFont(new Font("Arial", Font.BOLD, 14));
             g2d.drawString("Легенда:", legendX, legendY);
 
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-
-            // PC
-            g2d.setColor(Color.BLUE);
-            g2d.fillRoundRect(legendX, legendY + 20, 20, 15, 5, 5);
-            g2d.setColor(Color.BLACK);
-            g2d.drawRoundRect(legendX, legendY + 20, 20, 15, 5, 5);
-            g2d.drawString("- Компьютер (PC)", legendX + 30, legendY + 32);
-
-            // Switch
-            g2d.setColor(Color.GREEN);
-            g2d.fillRoundRect(legendX, legendY + 40, 20, 15, 5, 5);
-            g2d.setColor(Color.BLACK);
-            g2d.drawRoundRect(legendX, legendY + 40, 20, 15, 5, 5);
-            g2d.drawString("- Свитч (Switch)", legendX + 30, legendY + 52);
-
-            // Router
-            g2d.setColor(Color.ORANGE);
-            g2d.fillRoundRect(legendX, legendY + 60, 20, 15, 5, 5);
-            g2d.setColor(Color.BLACK);
-            g2d.drawRoundRect(legendX, legendY + 60, 20, 15, 5, 5);
-            g2d.drawString("- Роутер (Router)", legendX + 30, legendY + 72);
-
-            // Packet
-            g2d.setColor(Color.RED);
-            g2d.fillOval(legendX, legendY + 80, 20, 20);
-            g2d.setColor(Color.BLACK);
-            g2d.drawOval(legendX, legendY + 80, 20, 20);
-            g2d.drawString("- Пакет данных", legendX + 30, legendY + 95);
-
-            // Контейнеры
-            g2d.setColor(Color.BLACK);
-            g2d.drawString("Контейнеры JADE:", legendX + 200, legendY);
-
             g2d.setFont(new Font("Arial", Font.PLAIN, 11));
-            g2d.setColor(Color.YELLOW);
-            g2d.drawString("Main-Container", legendX + 210, legendY + 20);
-            g2d.setColor(Color.BLACK);
-            g2d.drawString(": PC1, Switch1, Router1", legendX + 290, legendY + 20);
 
-            g2d.setColor(Color.YELLOW);
-            g2d.drawString("Container2", legendX + 210, legendY + 40);
-            g2d.setColor(Color.BLACK);
-            g2d.drawString(": PC2, Router2", legendX + 290, legendY + 40);
+            drawLegendItem(g2d, legendX, legendY + 20, Color.BLUE, "Компьютер (PC)");
+            drawLegendItem(g2d, legendX, legendY + 40, Color.GREEN, "Свитч (Switch)");
+            drawLegendItem(g2d, legendX, legendY + 60, Color.ORANGE, "Роутер (Router)");
+            drawLegendItem(g2d, legendX, legendY + 80, Color.RED, "Пакет данных");
         }
-    }
 
-    // Точка входа для тестирования GUI
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            NetworkGUI gui = new NetworkGUI();
-            gui.setVisible(true);
-        });
+        private void drawLegendItem(Graphics2D g2d, int x, int y, Color color, String text) {
+            g2d.setColor(color);
+            g2d.fillRoundRect(x, y - 10, 15, 15, 3, 3);
+            g2d.setColor(Color.BLACK);
+            g2d.drawRoundRect(x, y - 10, 15, 15, 3, 3);
+            g2d.drawString(text, x + 25, y);
+        }
     }
 }

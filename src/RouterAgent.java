@@ -16,23 +16,18 @@ public class RouterAgent extends DeviceAgent {
         super.setup();
 
         Object[] args = getArguments();
-        if (args != null && args.length > 2) {
-            routerType = (String) args[1];
-        } else {
-            routerType = getLocalName();
-        }
+        routerType = (args != null && args.length > 1) ? (String) args[1] : getLocalName();
 
-        // Настраиваем таблицу маршрутизации в зависимости от типа роутера
         if (routerType.equals("Router1")) {
             ipAddress = "192.168.1.254";
-            routingTable.put("192.168.1.0/24", "Switch1");   // Локальная сеть
-            routingTable.put("192.168.2.0/24", "Router2");   // Сеть через другой роутер
-            routingTable.put("default", "Router2");          // Маршрут по умолчанию
+            routingTable.put("192.168.1.0/24", "Switch1");
+            routingTable.put("192.168.2.0/24", "Router2");
+            routingTable.put("default", "Router2");
         } else if (routerType.equals("Router2")) {
             ipAddress = "192.168.2.254";
-            routingTable.put("192.168.1.0/24", "Router1");   // Обратно в первую сеть
-            routingTable.put("192.168.2.0/24", "PC2");       // Локальная сеть
-            routingTable.put("default", "Router1");          // Маршрут по умолчанию
+            routingTable.put("192.168.1.0/24", "Router1");
+            routingTable.put("192.168.2.0/24", "PC2");
+            routingTable.put("default", "Router1");
         }
 
         System.out.println("[" + containerName + "] " + getLocalName() +
@@ -42,29 +37,49 @@ public class RouterAgent extends DeviceAgent {
     @Override
     protected void processMessage(ACLMessage msg) {
         String content = msg.getContent();
-        System.out.println("[" + containerName + "] " + getLocalName() +
-                " обрабатывает: " + content);
+        PacketInfo packet = PacketInfo.fromMessageString(content);
 
-        String targetIP = content.split(":")[1];
-        String nextHop = findNextHop(targetIP);
+        if (packet != null) {
+            packet.addHop(getLocalName());
+            packet.setCurrentHop(getLocalName());
 
-        if (nextHop != null) {
-            forwardPacket(msg, nextHop, "Маршрутизация к " + targetIP);
-        } else {
             System.out.println("[" + containerName + "] " + getLocalName() +
-                    " не нашел маршрут для " + targetIP);
+                    " обрабатывает: " + packet);
+
+            // Уменьшаем TTL
+            packet.setTTL(packet.getTTL() - 1);
+            if (packet.getTTL() <= 0) {
+                System.out.println("[" + containerName + "] " + getLocalName() +
+                        " отбрасывает пакет: TTL истек");
+                return;
+            }
+
+            String destIP = packet.getDestIP();
+            String nextHop = findNextHop(destIP);
+
+            if (nextHop != null) {
+                System.out.println("[" + containerName + "] " + getLocalName() +
+                        " → " + nextHop + " для " + destIP);
+
+                packet.addHop(nextHop);
+
+                ACLMessage forwardMsg = new ACLMessage(ACLMessage.INFORM);
+                forwardMsg.setContent(packet.toMessageString());
+                forwardMsg.addReceiver(getAID(nextHop));
+                send(forwardMsg);
+            } else {
+                System.out.println("[" + containerName + "] " + getLocalName() +
+                        " не нашел маршрут для " + destIP);
+            }
         }
     }
 
     private String findNextHop(String ip) {
-        // Проверяем точные совпадения сетей
         if (ip.startsWith("192.168.1.")) {
             return routingTable.get("192.168.1.0/24");
         } else if (ip.startsWith("192.168.2.")) {
             return routingTable.get("192.168.2.0/24");
         }
-
-        // Возвращаем маршрут по умолчанию
         return routingTable.get("default");
     }
 }

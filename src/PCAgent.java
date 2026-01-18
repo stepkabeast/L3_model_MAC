@@ -1,9 +1,11 @@
 import jade.core.AID;
 import jade.lang.acl.ACLMessage;
+import java.util.UUID;
 
 public class PCAgent extends DeviceAgent {
     private String defaultGateway;
     private String subnet;
+    private String packetLog = "";
 
     @Override
     protected String getDeviceType() {
@@ -14,7 +16,6 @@ public class PCAgent extends DeviceAgent {
     protected void setup() {
         super.setup();
 
-        // Определяем настройки по имени агента
         if (getLocalName().equals("PC1")) {
             ipAddress = "192.168.1.10";
             defaultGateway = "Router1";
@@ -31,62 +32,95 @@ public class PCAgent extends DeviceAgent {
     @Override
     protected void processMessage(ACLMessage msg) {
         String content = msg.getContent();
+        PacketInfo packet = PacketInfo.fromMessageString(content);
 
-        if (content.startsWith("PING:")) {
-            String[] parts = content.split(":");
-            String targetIP = parts[1];
-            String sourceIP = parts[2];
+        if (packet != null) {
+            packet.addHop(getLocalName());
 
-            System.out.println("[" + containerName + "] " + getLocalName() +
-                    " получил PING от " + sourceIP + " для " + targetIP);
-
-            // Если пинг адресован нам
-            if (ipAddress.equals(targetIP)) {
+            if (packet.getType().equals("PING")) {
                 System.out.println("[" + containerName + "] " + getLocalName() +
-                        " отправляет PONG");
+                        " получил PING пакет: " + packet);
 
-                ACLMessage reply = new ACLMessage(ACLMessage.INFORM);
-                reply.setContent("PONG:" + ipAddress + ":" + sourceIP);
-                reply.addReceiver(msg.getSender());
-                send(reply);
-            }
-        } else if (content.startsWith("PONG:")) {
-            String[] parts = content.split(":");
-            String responderIP = parts[1];
-            String originalSource = parts[2];
+                logPacketInfo(packet);
 
-            if (ipAddress.equals(originalSource)) {
+                // Если пинг адресован нам
+                if (ipAddress.equals(packet.getDestIP())) {
+                    System.out.println("[" + containerName + "] " + getLocalName() +
+                            " отправляет PONG");
+
+                    // Создаем ответный PONG пакет
+                    PacketInfo pongPacket = new PacketInfo(
+                            ipAddress, packet.getSourceIP(), "PONG",
+                            packet.getPacketId() + "-response"
+                    );
+                    pongPacket.setSourceMAC(macAddress);
+                    pongPacket.setDestMAC(packet.getSourceMAC());
+                    pongPacket.addHop(getLocalName());
+
+                    ACLMessage reply = new ACLMessage(ACLMessage.INFORM);
+                    reply.setContent(pongPacket.toMessageString());
+                    reply.addReceiver(msg.getSender());
+                    send(reply);
+
+                    logPacketInfo(pongPacket);
+                }
+            } else if (packet.getType().equals("PONG")) {
                 System.out.println("[" + containerName + "] " + getLocalName() +
-                        " получил PONG от " + responderIP + " ✓ Пинг успешен!");
+                        " получил PONG пакет: " + packet);
+
+                logPacketInfo(packet);
+
+                if (ipAddress.equals(packet.getDestIP())) {
+                    System.out.println("[" + containerName + "] ✓ " + getLocalName() +
+                            " Пинг успешен! Путь: " + packet.getPath());
+                }
             }
         }
     }
 
-    // Метод для отправки ping (может вызываться из GUI)
     public void sendPing(String targetIP) {
+        String packetId = "PKT-" + UUID.randomUUID().toString().substring(0, 8);
+
+        PacketInfo pingPacket = new PacketInfo(ipAddress, targetIP, "PING", packetId);
+        pingPacket.setSourceMAC(macAddress);
+        pingPacket.addHop(getLocalName());
+
         System.out.println("\n=== Инициация PING ===");
         System.out.println("[" + containerName + "] " + getLocalName() +
                 " запускает PING до " + targetIP);
+        System.out.println("ID пакета: " + packetId);
+        System.out.println("Пакет: " + pingPacket);
 
         ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
-        msg.setContent("PING:" + targetIP + ":" + this.ipAddress);
+        msg.setContent(pingPacket.toMessageString());
 
-        // Определяем маршрут в зависимости от подсети
+        // Определяем маршрут
         if (targetIP.startsWith("192.168.1.") && getLocalName().equals("PC1")) {
             msg.addReceiver(new AID("Switch1", AID.ISLOCALNAME));
             System.out.println("[" + containerName + "] " + getLocalName() +
-                    " → Switch1 (через свитч)");
+                    " → Switch1");
         } else if (targetIP.startsWith("192.168.2.") && getLocalName().equals("PC2")) {
             msg.addReceiver(new AID("Router2", AID.ISLOCALNAME));
             System.out.println("[" + containerName + "] " + getLocalName() +
-                    " → Router2 (шлюз по умолчанию)");
+                    " → Router2");
         } else {
-            // Отправляем на шлюз по умолчанию
             msg.addReceiver(new AID(defaultGateway, AID.ISLOCALNAME));
             System.out.println("[" + containerName + "] " + getLocalName() +
-                    " → " + defaultGateway + " (шлюз по умолчанию)");
+                    " → " + defaultGateway);
         }
 
         send(msg);
+        logPacketInfo(pingPacket);
+    }
+
+    private void logPacketInfo(PacketInfo packet) {
+        packetLog += packet + "\n";
+        if (packetLog.length() > 1000) {
+            packetLog = packetLog.substring(packetLog.length() - 500);
+        }
+    }
+
+    public String getPacketLog() {
+        return packetLog;
     }
 }
