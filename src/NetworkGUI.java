@@ -388,7 +388,7 @@ public class NetworkGUI extends JFrame {
                     g2d.setFont(new Font("Arial", Font.PLAIN, 10));
                     int midX = (d1.x + d2.x + d1.width) / 2;
                     int midY = (d1.y + d2.y + d1.height) / 2;
-                    g2d.drawString("WAN Link", midX, midY - 5);
+                    g2d.drawString("Link", midX, midY - 5);
                 }
             }
         }
