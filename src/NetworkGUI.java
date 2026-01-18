@@ -113,21 +113,29 @@ public class NetworkGUI extends JFrame {
     }
 
     private JPanel createDevicesInfoPanel() {
-        JPanel panel = new JPanel(new GridLayout(0, 1, 5, 5));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
         for (NetworkConfig.DeviceInfo info : deviceInfoMap.values()) {
             String gateway = info.type.equals("PC") && info.gateway != null ?
                     "Шлюз=" + info.gateway : "Тип=" + info.type;
             String text = String.format("%s: IP=%s, %s, Сеть=%s, Контейнер=%s",
-                    info.name, info.ip,
-                    gateway,
+                    info.name, info.ip, gateway,
                     info.network != null ? info.network : "N/A",
                     info.container);
+
             JLabel label = new JLabel(text);
-            label.setFont(new Font("Arial", Font.PLAIN, 14));
-            label.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+            label.setFont(new Font("Arial", Font.PLAIN, 12));
+            label.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
+
+            // Можно регулировать промежутки через ригидные области
             panel.add(label);
+            panel.add(Box.createRigidArea(new Dimension(0, 1))); // 1 пиксель между строками
+        }
+
+        // Удаляем последний лишний промежуток
+        if (panel.getComponentCount() > 0) {
+            panel.remove(panel.getComponentCount() - 1);
         }
 
         return panel;

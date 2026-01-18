@@ -5,11 +5,13 @@ import jade.wrapper.AgentContainer;
 import jade.wrapper.AgentController;
 import javax.swing.*;
 import java.util.*;
+import jade.util.Logger;
 
 public class MainLauncher {
     private static Runtime rt;
     private static List<AgentContainer> containers = new ArrayList<>();
     private static NetworkConfig config;
+    private static final Logger logger = Logger.getMyLogger(MainLauncher.class.getName());
 
     public static void main(String[] args) {
         config = NetworkConfig.load("config/network-config.json");
@@ -43,7 +45,8 @@ public class MainLauncher {
                     Profile pMain = new ProfileImpl();
                     pMain.setParameter(Profile.MAIN_HOST, "localhost");
                     pMain.setParameter(Profile.MAIN_PORT, "1099");
-                    pMain.setParameter(Profile.GUI, "false");
+                    pMain.setParameter(Profile.GUI, "true");
+                    pMain.setParameter(Profile.CONTAINER_NAME, containerName);
                     container = rt.createMainContainer(pMain);
                 } else {
                     Profile p = new ProfileImpl();
@@ -58,7 +61,8 @@ public class MainLauncher {
                 createAgentsInContainer(container, subnet);
             }
 
-            System.out.println("\n=== Все агенты успешно запущены ===");
+            logger.log(Logger.INFO, "Agents started");
+            //System.out.println("\n=== Все агенты успешно запущены ===");
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -101,10 +105,11 @@ public class MainLauncher {
                     );
                     ac.start();
 
-                    System.out.println("✓ Агент " + name + " успешно создан и запущен");
+                    logger.log(Logger.INFO, "Agent " + name + " is ready");
+                    System.out.println("Агент " + name + " успешно создан и запущен");
 
                 } catch (Exception e) {
-                    System.err.println("❌ Ошибка при создании агента " + name + " в " + containerName);
+                    System.err.println("Ошибка при создании агента " + name + " в " + containerName);
                     e.printStackTrace();
                 }
             }
